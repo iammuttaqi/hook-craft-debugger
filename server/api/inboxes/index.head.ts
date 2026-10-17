@@ -5,5 +5,5 @@ export default defineEventHandler(async (event) => {
   // Ensure DB cold-start initialization and query execution
   await prisma.inbox.count();
   setResponseStatus(event, 200);
-  return null;
+  return '';
 });
