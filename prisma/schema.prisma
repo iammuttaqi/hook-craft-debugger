@@ -1,0 +1,61 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-1.0.x", "rhel-openssl-3.0.x"]
+}
+
+/// Dynamic Ingress Endpoint Inbox
+model Inbox {
+  id             String          @id @default(cuid())
+  name           String
+  slug           String          @unique
+  mockStatusCode Int             @default(200)
+  mockDelayMs    Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  events         CapturedEvent[]
+
+  @@index([slug])
+  @@map("inboxes")
+}
+
+/// Inbound Captured HTTP Webhook Request
+model CapturedEvent {
+  id             String      @id @default(cuid())
+  inboxId        String
+  inbox          Inbox       @relation(fields: [inboxId], references: [id], onDelete: Cascade)
+  method         String      // POST, GET, PUT, PATCH, DELETE
+  path           String      // Path captured at endpoint
+  queryParams    String?     // Serialized JSON of URL search parameters
+  headersJson    String      // Serialized JSON of inbound HTTP headers
+  rawBody        String      // Exact unmodified raw payload string/bytes
+  parsedJson     String?     // Formatted JSON string if valid; null if non-JSON payload
+  clientIp       String?     // Remote client IP address
+  responseStatus Int         // HTTP status code delivered back to the caller
+  createdAt      DateTime    @default(now())
+  replays        ReplayLog[]
+
+  @@index([inboxId, createdAt])
+  @@map("captured_events")
+}
+
+/// Outbound Forward / Replay Execution Log
+model ReplayLog {
+  id                 String        @id @default(cuid())
+  eventId            String
+  event              CapturedEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  targetUrl          String        // Target HTTP endpoint (e.g., http://localhost:3000/api/webhooks)
+  requestHeadersJson String        // Serialized JSON of headers sent during replay
+  requestBody        String        // Exact payload sent during replay (including any edits)
+  responseStatus     Int           // HTTP status code received from target server (or 0 for network failure)
+  latencyMs          Int           // Round-trip network latency in milliseconds
+  responseBody       String?       // Truncated preview of response body from target (max 10KB)
+  createdAt          DateTime      @default(now())
+
+  @@index([eventId, createdAt])
+  @@map("replay_logs")
+}
